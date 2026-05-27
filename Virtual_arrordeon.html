@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Виртуальный Баян (Система Б)</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #1e1e1e;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+  }
+  
+  h1 {
+    margin-bottom: 5px;
+  }
+  
+  p.subtitle {
+    color: #aaaaaa;
+    margin-bottom: 30px;
+  }
+
+  #start-btn {
+    padding: 12px 25px;
+    font-size: 1.2em;
+    background: #e53935;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    transition: background 0.2s;
+  }
+
+  #start-btn:hover {
+    background: #d32f2f;
+  }
+  
+  #start-btn.active {
+    background: #4caf50;
+    pointer-events: none;
+  }
+
+  .bayan-container {
+    background: #2a2a2a;
+    padding: 40px;
+    border-radius: 20px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.6), inset 0 2px 5px rgba(255,255,255,0.1);
+  }
+
+  .row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+  
+  /* Имитация смещения рядов баяна и QWERTY */
+  .row:nth-child(1) { margin-left: -30px; }
+  .row:nth-child(2) { margin-left: 0; }
+  .row:nth-child(3) { margin-left: 30px; }
+
+  .key {
+    width: 65px;
+    height: 65px;
+    background: #eeeeee;
+    color: #111;
+    border-radius: 50%;
+    margin: 0 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 
+      0 6px 0 #999, 
+      0 10px 15px rgba(0,0,0,0.4), 
+      inset 0 -4px 6px rgba(0,0,0,0.1);
+    transition: transform 0.05s, box-shadow 0.05s, background-color 0.05s;
+  }
+
+  .key.active {
+    background: #4caf50;
+    color: white;
+    transform: translateY(6px);
+    box-shadow: 
+      0 0px 0 #2e7d32, 
+      0 2px 5px rgba(0,0,0,0.4), 
+      inset 0 4px 6px rgba(0,0,0,0.2);
+  }
+
+  .key-label {
+    font-size: 1.3em;
+    font-weight: bold;
+    pointer-events: none;
+  }
+
+  .note-label {
+    font-size: 0.75em;
+    color: #555;
+    margin-top: 4px;
+    pointer-events: none;
+  }
+
+  .key.active .note-label {
+    color: #e0e0e0;
+  }
+
+</style>
+</head>
+<body>
+
+<h1>🎹 Виртуальный Баян</h1>
+<p class="subtitle">Раскладка «Система Б» (Q=Ре#, R=До, F=До#, V=Ре...)</p>
+
+<button id="start-btn">Включить звук</button>
+
+<div class="bayan-container">
+  <!-- Ряды кнопок будут сгенерированы через JS -->
+  <div class="row" id="row-1"></div>
+  <div class="row" id="row-2"></div>
+  <div class="row" id="row-3"></div>
+</div>
+
+<script>
+  let audioCtx = null;
+  const activeOscillators = {};
+
+  // Карта клавиш и соответствующих им нот/частот
+  const keyMap = {
+    // 1 РЯД (Верхний ряд QWERTY)
+    'KeyQ': { char: 'Q', note: 'Ре#', freq: 155.56 },
+    'KeyW': { char: 'W', note: 'Фа#', freq: 185.00 },
+    'KeyE': { char: 'E', note: 'Ля', freq: 220.00 },
+    'KeyR': { char: 'R', note: 'До', freq: 261.63 }, // До 1-й октавы
+    'KeyT': { char: 'T', note: 'Ре#', freq: 311.13 },
+    'KeyY': { char: 'Y', note: 'Фа#', freq: 369.99 },
+    'KeyU': { char: 'U', note: 'Ля', freq: 440.00 },
+    'KeyI': { char: 'I', note: 'До', freq: 523.25 },
+    'KeyO': { char: 'O', note: 'Ре#', freq: 622.25 },
+    'KeyP': { char: 'P', note: 'Фа#', freq: 739.99 },
+    'BracketLeft': { char: '[', note: 'Ля', freq: 880.00 },
+    'BracketRight': { char: ']', note: 'До', freq: 1046.50 },
+
+    // 2 РЯД (Средний ряд QWERTY)
+    'KeyA': { char: 'A', note: 'Ми', freq: 164.81 },
+    'KeyS': { char: 'S', note: 'Соль', freq: 196.00 },
+    'KeyD': { char: 'D', note: 'Ля#', freq: 233.08 },
+    'KeyF': { char: 'F', note: 'До#', freq: 277.18 },
+    'KeyG': { char: 'G', note: 'Ми', freq: 329.63 },
+    'KeyH': { char: 'H', note: 'Соль', freq: 392.00 },
+    'KeyJ': { char: 'J', note: 'Ля#', freq: 466.16 },
+    'KeyK': { char: 'K', note: 'До#', freq: 554.37 },
+    'KeyL': { char: 'L', note: 'Ми', freq: 659.25 },
+    'Semicolon': { char: ';', note: 'Соль', freq: 783.99 },
+    'Quote': { char: "'", note: 'Ля#', freq: 932.33 },
+
+    // 3 РЯД (Нижний ряд QWERTY)
+    'KeyZ': { char: 'Z', note: 'Фа', freq: 174.61 },
+    'KeyX': { char: 'X', note: 'Соль#', freq: 207.65 },
+    'KeyC': { char: 'C', note: 'Си', freq: 246.94 },
+    'KeyV': { char: 'V', note: 'Ре', freq: 293.66 },
+    'KeyB': { char: 'B', note: 'Фа', freq: 349.23 },
+    'KeyN': { char: 'N', note: 'Соль#', freq: 415.30 },
+    'KeyM': { char: 'M', note: 'Си', freq: 493.88 },
+    'Comma': { char: ',', note: 'Ре', freq: 587.33 },
+    'Period': { char: '.', note: 'Фа', freq: 698.46 },
+    'Slash': { char: '/', note: 'Соль#', freq: 830.61 }
+  };
+
+  const rows = {
+    'row-1': ['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyT', 'KeyY', 'KeyU', 'KeyI', 'KeyO', 'KeyP', 'BracketLeft', 'BracketRight'],
+    'row-2': ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyG', 'KeyH', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon', 'Quote'],
+    'row-3': ['KeyZ', 'KeyX', 'KeyC', 'KeyV', 'KeyB', 'KeyN', 'KeyM', 'Comma', 'Period', 'Slash']
+  };
+
+  // Отрисовка кнопок
+  for (const [rowId, keys] of Object.entries(rows)) {
+    const rowContainer = document.getElementById(rowId);
+    keys.forEach(code => {
+      const btn = document.createElement('div');
+      btn.className = 'key';
+      btn.id = code;
+      btn.innerHTML = `
+        <div class="key-label">${keyMap[code].char}</div>
+        <div class="note-label">${keyMap[code].note}</div>
+      `;
+      // Поддержка кликов мышкой
+      btn.addEventListener('mousedown', () => pressKey(code));
+      btn.addEventListener('mouseup', () => releaseKey(code));
+      btn.addEventListener('mouseleave', () => releaseKey(code));
+      rowContainer.appendChild(btn);
+    });
+  }
+
+  // Инициализация звука
+  document.getElementById('start-btn').addEventListener('click', function() {
+    if (!audioCtx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContext();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    this.innerText = 'Звук включен 🎵';
+    this.classList.add('active');
+  });
+
+  // Функция воспроизведения ноты
+  function playNote(freq) {
+    if (!audioCtx) return null;
+    
+    // Создаем два осциллятора для "баянного" звука
+    const osc1 = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+
+    osc1.type = 'sawtooth';
+    osc2.type = 'square';
+    
+    // Легкий расстрой (detune) для эффекта язычкового инструмента
+    osc1.frequency.value = freq;
+    osc2.frequency.value = freq * 1.002;
+
+    // Фильтр высоких частот, чтобы звук был мягче
+    filter.type = 'lowpass';
+    filter.frequency.value = 3000;
+
+    // Плавная атака
+    gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.25, audioCtx.currentTime + 0.05);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    osc1.start();
+    osc2.start();
+
+    return { osc1, osc2, gainNode };
+  }
+
+  // Функция остановки ноты
+  function stopNote(voice) {
+    if (!voice || !audioCtx) return;
+    const { osc1, osc2, gainNode } = voice;
+    
+    // Плавное затухание
+    gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(gainNode.gain.value, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+    
+    setTimeout(() => {
+      osc1.stop();
+      osc2.stop();
+      osc1.disconnect();
+      osc2.disconnect();
+    }, 150);
+  }
+
+  // Обработчики нажатий
+  function pressKey(code) {
+    if (!keyMap[code] || activeOscillators[code]) return;
+    const keyElement = document.getElementById(code);
+    if (keyElement) keyElement.classList.add('active');
+    activeOscillators[code] = playNote(keyMap[code].freq);
+  }
+
+  function releaseKey(code) {
+    if (!keyMap[code] || !activeOscillators[code]) return;
+    const keyElement = document.getElementById(code);
+    if (keyElement) keyElement.classList.remove('active');
+    stopNote(activeOscillators[code]);
+    activeOscillators[code] = null;
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return; // Игнорируем автоповтор при долгом зажатии
+    pressKey(e.code);
+  });
+
+  window.addEventListener('keyup', (e) => {
+    releaseKey(e.code);
+  });
+</script>
+</body>
+</html>
